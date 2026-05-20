@@ -22,24 +22,31 @@ jobs:
           sudo service ssh start
           echo "✅ SSH ready (runner / freessh2026)"
 
-          # Install bore (SSH tunnel - auto-restart on death)
-          echo "🔌 Installing bore SSH tunnel..."
-          curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-unknown-linux-musl.tar.gz | tar xz
-          chmod +x bore
-          # Auto-restart loop: bore dies → 3s → revive
+          # SSH反向隧道 via serveo.net (zero install, stable)
+          echo "🔌 Creating SSH tunnel via serveo.net..."
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 0:localhost:22 serveo.net > /tmp/serveo.log 2>&1 &
+          SERVE_PID=$!
+          sleep 8
+          SSH_ADDR=$(grep -o 'serveo.net:[0-9]*' /tmp/serveo.log | head -1)
+          if [ -z "$SSH_ADDR" ]; then
+            SSH_ADDR=$(cat /tmp/serveo.log | grep -oE '[a-zA-Z0-9.-]+:[0-9]+' | head -1)
+          fi
+          echo "✅ SSH tunnel: ${SSH_ADDR}" | tee /tmp/ssh_addr.txt
+          
+          # Monitor: restart tunnel if it dies
           (
             while true; do
-              ./bore local 22 --to bore.pub > /tmp/bore.log 2>&1 &
-              BORE_PID=$!
-              sleep 5
-              SSH_ADDR=$(grep -o 'bore.pub:[0-9]*' /tmp/bore.log | head -1)
-              echo "✅ SSH tunnel: ${SSH_ADDR}" | tee /tmp/ssh_addr.txt
-              wait $BORE_PID 2>/dev/null
-              echo "⚠️ Bore tunnel died! Restarting in 3s..."
-              sleep 3
+              if ! kill -0 $SERVE_PID 2>/dev/null; then
+                echo "⚠️ SSH tunnel died! Restarting..."
+                ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 0:localhost:22 serveo.net > /tmp/serveo.log 2>&1 &
+                SERVE_PID=$!
+                sleep 8
+                NEW_ADDR=$(grep -o 'serveo.net:[0-9]*' /tmp/serveo.log | head -1)
+                [ -n "$NEW_ADDR" ] && echo "✅ SSH tunnel: ${NEW_ADDR}" | tee /tmp/ssh_addr.txt
+              fi
+              sleep 30
             done
           ) &
-          echo "✅ SSH auto-restart loop active"
 
           # Install cloudflared
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
@@ -56,7 +63,13 @@ jobs:
           ./cloudflared tunnel --url http://localhost:8080 2>&1 | tee /tmp/cf.log &
           sleep 12
 
-          SSH_ADDR=$(cat /tmp/ssh_addr.txt 2>/dev/null || echo "waiting...")
+          # Wait for SSH tunnel address
+          for i in $(seq 1 10); do
+            SSH_ADDR=$(cat /tmp/ssh_addr.txt 2>/dev/null | grep -o 'serveo.net:[0-9]*' | head -1)
+            [ -n "$SSH_ADDR" ] && break
+            sleep 2
+          done
+          SSH_ADDR="${SSH_ADDR:-unknown}"
 
           URL=$(grep -o 'https://[^ ]*trycloudflare.com' /tmp/cf.log | head -1)
           echo ""
