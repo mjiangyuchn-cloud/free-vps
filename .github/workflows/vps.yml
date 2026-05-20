@@ -56,6 +56,8 @@ jobs:
           ./cloudflared tunnel --url http://localhost:8080 2>&1 | tee /tmp/cf.log &
           sleep 12
 
+          SSH_ADDR=$(cat /tmp/ssh_addr.txt 2>/dev/null || echo "waiting...")
+
           URL=$(grep -o 'https://[^ ]*trycloudflare.com' /tmp/cf.log | head -1)
           echo ""
           echo "╔══════════════════════════════════════════════╗"
@@ -69,7 +71,7 @@ jobs:
           echo "║  💾 RAM : 16GB | CPU: 4 cores | Disk: 14GB"
           echo "╚══════════════════════════════════════════════╝"
           echo ""
-
+          
           # Keep alive for 6 hours
           echo "⏳ Keeping alive..."
           sleep 21000
