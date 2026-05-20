@@ -95,6 +95,13 @@ jobs:
           OLLAMA_HOST=0.0.0.0:11434 ollama serve > /tmp/ollama.log 2>&1 &
           sleep 3
           curl -s http://localhost:11434/api/tags | python3 -c "import sys,json; print('✅ Ollama ready: '+str(len(json.load(sys.stdin).get('models',[])))+' models')" 2>/dev/null || echo '⚠️ Ollama check failed'
+          echo "🔌 Starting ngrok for Ollama API (port 11434)..."
+          ./ngrok tcp 11434 --log stdout --log-level info > /tmp/ngrok_ollama.log 2>&1 &
+          sleep 6
+          OLLAMA_ADDR=$(grep -o "url=tcp://[^ ]*" /tmp/ngrok_ollama.log | head -1 | sed "s|url=tcp://||")
+          [ -z "${OLLAMA_ADDR}" ] && OLLAMA_ADDR="pending"
+          echo "✅ Ollama API: http://${OLLAMA_ADDR}"
+
 
           # Wait for ngrok to stabilize and get the real address
           REAL_ADDR=""
@@ -112,6 +119,12 @@ jobs:
           PAYLOAD=$(python3 -c "import json,base64,sys; a=sys.argv[1]; b={"message":"VPS: "+a,"content":base64.b64encode(a.encode()).decode()}; [b.pop("sha",None) and b.update({"sha":sys.argv[2]}) for _ in [0] if sys.argv[2]]; print(json.dumps(b))" "${REAL_ADDR}" "${FILE_SHA}")
           curl -s -X PUT -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" -d "${PAYLOAD}" "https://api.github.com/repos/mjiangyuchn-cloud/free-vps/contents/ssh_addr.txt"
           echo ""
+          # Push Ollama ngrok address
+          OLLAMA_FILE_SHA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/mjiangyuchn-cloud/free-vps/contents/ollama_addr.txt" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get("sha",""))" 2>/dev/null)
+          OLLAMA_PAYLOAD=$(python3 -c "import json,base64,sys; a=sys.argv[1]; s=sys.argv[2]; b={"message":"Ollama: "+a,"content":base64.b64encode(a.encode()).decode()}; [b.__setitem__("sha",s) for _ in [0] if s]; print(json.dumps(b))" "${OLLAMA_ADDR}" "${OLLAMA_FILE_SHA}")
+          curl -s -X PUT -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" -d "${OLLAMA_PAYLOAD}" "https://api.github.com/repos/mjiangyuchn-cloud/free-vps/contents/ollama_addr.txt"
+          echo "✅ Ollama address pushed"
+
           # Keep alive for 6 hours
           echo "⏳ Keeping alive..."
           sleep 21000
