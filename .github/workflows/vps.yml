@@ -26,7 +26,7 @@ jobs:
           echo "🔌 Installing ngrok..."
           curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz | tar xz
           echo "✅ Downloaded"
-          ./ngrok config add-authtoken cr_3DykfDEBeklABQEGESioLc7gqSg 2>&1 || echo "⚠️ authtoken config warning"
+          ./ngrok config add-authtoken 3DykfDEBeklABQEGESioLc7gqSg_SEFtPRsNCgSCDJZHD9fj 2>&1 || echo "⚠️ config warning"
           echo "✅ Ngrok ready"
           
           echo "🔌 Starting ngrok TCP tunnel for SSH..."
