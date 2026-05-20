@@ -22,14 +22,24 @@ jobs:
           sudo service ssh start
           echo "✅ SSH ready (runner / freessh2026)"
 
-          # Install bore (SSH tunnel - zero registration)
+          # Install bore (SSH tunnel - auto-restart on death)
           echo "🔌 Installing bore SSH tunnel..."
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-unknown-linux-musl.tar.gz | tar xz
           chmod +x bore
-          ./bore local 22 --to bore.pub > /tmp/bore.log 2>&1 &
-          sleep 5
-          SSH_ADDR=$(grep -o 'bore.pub:[0-9]*' /tmp/bore.log | head -1)
-          echo "✅ SSH tunnel: ${SSH_ADDR}"
+          # Auto-restart loop: bore dies → 3s → revive
+          (
+            while true; do
+              ./bore local 22 --to bore.pub > /tmp/bore.log 2>&1 &
+              BORE_PID=$!
+              sleep 5
+              SSH_ADDR=$(grep -o 'bore.pub:[0-9]*' /tmp/bore.log | head -1)
+              echo "✅ SSH tunnel: ${SSH_ADDR}" | tee /tmp/ssh_addr.txt
+              wait $BORE_PID 2>/dev/null
+              echo "⚠️ Bore tunnel died! Restarting in 3s..."
+              sleep 3
+            done
+          ) &
+          echo "✅ SSH auto-restart loop active"
 
           # Install cloudflared
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
