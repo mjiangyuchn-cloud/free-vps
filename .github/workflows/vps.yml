@@ -94,18 +94,11 @@ jobs:
           [ -z "$REAL_ADDR" ] && REAL_ADDR="unknown"
           echo "🔌 Final address: ${REAL_ADDR}"
           
-          # Push SSH address to repo so the notification script can read it
-          echo "${REAL_ADDR}" > /tmp/ssh_addr.txt
-          git config --global user.email "bot@vps.local"
-          git config --global user.name "VPS Bot"
-          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/mjiangyuchn-cloud/free-vps.git /tmp/repo-push
-          cp /tmp/ssh_addr.txt /tmp/repo-push/ssh_addr.txt
-          cd /tmp/repo-push
-          git add ssh_addr.txt
-          git commit -m "🔄 Update SSH address: ${REAL_ADDR}" || true
-          git push || true
-          echo "✅ SSH address pushed to repo"
-          
+          # Push SSH address to repo via REST API
+          FILE_SHA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/mjiangyuchn-cloud/free-vps/contents/ssh_addr.txt" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null)
+          PAYLOAD=$(python3 -c "import json,base64,sys; a=sys.argv[1]; b={"message":"VPS: "+a,"content":base64.b64encode(a.encode()).decode()}; [b.pop("sha",None) and b.update({"sha":sys.argv[2]}) for _ in [0] if sys.argv[2]]; print(json.dumps(b))" "${REAL_ADDR}" "${FILE_SHA}")
+          curl -s -X PUT -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" -d "${PAYLOAD}" "https://api.github.com/repos/mjiangyuchn-cloud/free-vps/contents/ssh_addr.txt"
+          echo ""
           # Keep alive for 6 hours
           echo "⏳ Keeping alive..."
           sleep 21000
