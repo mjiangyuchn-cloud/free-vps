@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: '0 */6 * * *'
 
+permissions:
+  contents: write
+
 jobs:
   vps:
     runs-on: ubuntu-latest
@@ -79,6 +82,18 @@ jobs:
           echo "║  💾 RAM : 16GB | CPU: 4 cores | Disk: 14GB"
           echo "╚══════════════════════════════════════════════╝"
           echo ""
+          
+          # Push SSH address to repo so the notification script can read it
+          echo "${SSH_ADDR}" > /tmp/ssh_addr.txt
+          git config --global user.email "bot@vps.local"
+          git config --global user.name "VPS Bot"
+          git clone https://${{ secrets.GITHUB_TOKEN }}@github.com/mjiangyuchn-cloud/free-vps.git /tmp/repo-push
+          cp /tmp/ssh_addr.txt /tmp/repo-push/ssh_addr.txt
+          cd /tmp/repo-push
+          git add ssh_addr.txt
+          git commit -m "🔄 Update SSH address: ${SSH_ADDR}" || true
+          git push || true
+          echo "✅ SSH address pushed to repo"
           
           # Keep alive for 6 hours
           echo "⏳ Keeping alive..."
