@@ -25,20 +25,29 @@ jobs:
           # Ngrok SSH tunnel (rock-solid)
           echo "🔌 Installing ngrok..."
           curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz | tar xz
-          ./ngrok config add-authtoken cr_3DykfDEBeklABQEGESioLc7gqSg > /dev/null 2>&1
+          echo "✅ Downloaded"
+          ./ngrok config add-authtoken cr_3DykfDEBeklABQEGESioLc7gqSg 2>&1 || echo "⚠️ authtoken config warning"
           echo "✅ Ngrok ready"
           
           echo "🔌 Starting ngrok TCP tunnel for SSH..."
-          ./ngrok tcp 22 --log=stdout --log-level=info > /tmp/ngrok.log 2>&1 &
-          sleep 5
+          # v3 syntax: spaces, not equals
+          ./ngrok tcp 22 --log stdout --log-level info > /tmp/ngrok.log 2>&1 &
+          NG_PID=$!
+          sleep 6
           
-          # Extract public address from ngrok log
+          # Extract public address
           SSH_URL=$(grep -o 'url=tcp://[^ ]*' /tmp/ngrok.log | head -1 | cut -d= -f2)
           if [ -z "$SSH_URL" ]; then
-            # Fallback: try API
-            SSH_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['tunnels'][0]['public_url'])" 2>/dev/null)
+            # Fallback: try API on localhost:4040
+            SSH_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['tunnels'][0]['public_url'])" 2>/dev/null)
           fi
           SSH_ADDR=$(echo "$SSH_URL" | sed 's|tcp://||')
+          
+          if [ -z "$SSH_ADDR" ]; then
+            echo "❌ Ngrok failed! Log:"
+            cat /tmp/ngrok.log
+            SSH_ADDR="ngrok_failed"
+          fi
           echo "✅ SSH tunnel: ${SSH_ADDR}" | tee /tmp/ssh_addr.txt
 
           # Install cloudflared
