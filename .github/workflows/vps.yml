@@ -22,31 +22,24 @@ jobs:
           sudo service ssh start
           echo "✅ SSH ready (runner / freessh2026)"
 
-          # SSH反向隧道 via serveo.net (zero install, stable)
-          echo "🔌 Creating SSH tunnel via serveo.net..."
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 0:localhost:22 serveo.net > /tmp/serveo.log 2>&1 &
-          SERVE_PID=$!
-          sleep 8
-          SSH_ADDR=$(grep -o 'serveo.net:[0-9]*' /tmp/serveo.log | head -1)
-          if [ -z "$SSH_ADDR" ]; then
-            SSH_ADDR=$(cat /tmp/serveo.log | grep -oE '[a-zA-Z0-9.-]+:[0-9]+' | head -1)
-          fi
-          echo "✅ SSH tunnel: ${SSH_ADDR}" | tee /tmp/ssh_addr.txt
+          # Ngrok SSH tunnel (rock-solid)
+          echo "🔌 Installing ngrok..."
+          curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz | tar xz
+          ./ngrok config add-authtoken cr_3DykfDEBeklABQEGESioLc7gqSg > /dev/null 2>&1
+          echo "✅ Ngrok ready"
           
-          # Monitor: restart tunnel if it dies
-          (
-            while true; do
-              if ! kill -0 $SERVE_PID 2>/dev/null; then
-                echo "⚠️ SSH tunnel died! Restarting..."
-                ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 0:localhost:22 serveo.net > /tmp/serveo.log 2>&1 &
-                SERVE_PID=$!
-                sleep 8
-                NEW_ADDR=$(grep -o 'serveo.net:[0-9]*' /tmp/serveo.log | head -1)
-                [ -n "$NEW_ADDR" ] && echo "✅ SSH tunnel: ${NEW_ADDR}" | tee /tmp/ssh_addr.txt
-              fi
-              sleep 30
-            done
-          ) &
+          echo "🔌 Starting ngrok TCP tunnel for SSH..."
+          ./ngrok tcp 22 --log=stdout --log-level=info > /tmp/ngrok.log 2>&1 &
+          sleep 5
+          
+          # Extract public address from ngrok log
+          SSH_URL=$(grep -o 'url=tcp://[^ ]*' /tmp/ngrok.log | head -1 | cut -d= -f2)
+          if [ -z "$SSH_URL" ]; then
+            # Fallback: try API
+            SSH_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['tunnels'][0]['public_url'])" 2>/dev/null)
+          fi
+          SSH_ADDR=$(echo "$SSH_URL" | sed 's|tcp://||')
+          echo "✅ SSH tunnel: ${SSH_ADDR}" | tee /tmp/ssh_addr.txt
 
           # Install cloudflared
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
@@ -65,7 +58,8 @@ jobs:
 
           # Wait for SSH tunnel address
           for i in $(seq 1 10); do
-            SSH_ADDR=$(cat /tmp/ssh_addr.txt 2>/dev/null | grep -o 'serveo.net:[0-9]*' | head -1)
+            SSH_ADDR=$(cat /tmp/ssh_addr.txt 2>/dev/null | grep -oE '[a-zA-Z0-9.-]+\.ngrok[^ ]*:[0-9]+' | head -1)
+            [ -z "$SSH_ADDR" ] && SSH_ADDR=$(cat /tmp/ssh_addr.txt 2>/dev/null | grep -oE '[a-zA-Z0-9.-]+:[0-9]+' | head -1)
             [ -n "$SSH_ADDR" ] && break
             sleep 2
           done
