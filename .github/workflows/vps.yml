@@ -1,0 +1,55 @@
+name: 🖥️ Free VPS
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
+
+jobs:
+  vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: 🚀 Boot Free VPS
+        run: |
+          echo "⚡ Installing SSH + Web Terminal..."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openssh-server ttyd curl wget > /dev/null 2>&1
+
+          # Configure SSH
+          echo "runner:freessh2026" | sudo chpasswd
+          sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config 2>/dev/null
+          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>/dev/null
+          sudo service ssh start
+          echo "✅ SSH ready (runner / freessh2026)"
+
+          # Install cloudflared
+          curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+          chmod +x cloudflared
+          echo "✅ Cloudflared installed"
+
+          # Start web terminal on port 8080
+          ttyd -p 8080 bash &
+          sleep 2
+          echo "✅ Web terminal on port 8080"
+
+          # Expose via Cloudflare Tunnel
+          echo "🌐 Creating tunnel..."
+          ./cloudflared tunnel --url http://localhost:8080 2>&1 | tee /tmp/cf.log &
+          sleep 12
+
+          URL=$(grep -o 'https://[^ ]*trycloudflare.com' /tmp/cf.log | head -1)
+          echo ""
+          echo "╔══════════════════════════════════════════════╗"
+          echo "║        🖥️  YOUR FREE VPS IS READY!           ║"
+          echo "╠══════════════════════════════════════════════╣"
+          echo "║  🔗 URL : $URL"
+          echo "║  👤 User: runner"
+          echo "║  🔑 Pass: freessh2026"
+          echo "║  ⏰ Life: 6 hours (till $(date -d '+6 hours' '+%H:%M UTC'))"
+          echo "║  💾 RAM : 16GB | CPU: 4 cores | Disk: 14GB"
+          echo "╚══════════════════════════════════════════════╝"
+          echo ""
+
+          # Keep alive for 6 hours
+          echo "⏳ Keeping alive..."
+          sleep 21000
