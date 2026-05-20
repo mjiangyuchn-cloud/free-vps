@@ -35,13 +35,14 @@ jobs:
           NG_PID=$!
           sleep 6
           
-          # Extract public address
+          # Extract public address (disable errexit for grep fallback)
+          set +e
           SSH_URL=$(grep -o 'url=tcp://[^ ]*' /tmp/ngrok.log | head -1 | cut -d= -f2)
           if [ -z "$SSH_URL" ]; then
-            # Fallback: try API on localhost:4040
             SSH_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['tunnels'][0]['public_url'])" 2>/dev/null)
           fi
           SSH_ADDR=$(echo "$SSH_URL" | sed 's|tcp://||')
+          set -e
           
           if [ -z "$SSH_ADDR" ]; then
             echo "❌ Ngrok failed! Log:"
