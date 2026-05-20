@@ -22,6 +22,15 @@ jobs:
           sudo service ssh start
           echo "✅ SSH ready (runner / freessh2026)"
 
+          # Install bore (SSH tunnel - zero registration)
+          echo "🔌 Installing bore SSH tunnel..."
+          curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-unknown-linux-musl.tar.gz | tar xz
+          chmod +x bore
+          ./bore local 22 --to bore.pub > /tmp/bore.log 2>&1 &
+          sleep 5
+          SSH_ADDR=$(grep -o 'bore.pub:[0-9]*' /tmp/bore.log | head -1)
+          echo "✅ SSH tunnel: ${SSH_ADDR}"
+
           # Install cloudflared
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
           chmod +x cloudflared
@@ -43,6 +52,7 @@ jobs:
           echo "║        🖥️  YOUR FREE VPS IS READY!           ║"
           echo "╠══════════════════════════════════════════════╣"
           echo "║  🔗 URL : $URL"
+          echo "║  🔌 SSH : ssh runner@${SSH_ADDR}"
           echo "║  👤 User: runner"
           echo "║  🔑 Pass: freessh2026"
           echo "║  ⏰ Life: 6 hours (till $(date -d '+6 hours' '+%H:%M UTC'))"
